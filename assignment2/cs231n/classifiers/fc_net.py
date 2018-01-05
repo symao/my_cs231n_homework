@@ -45,7 +45,12 @@ class TwoLayerNet(object):
     # weights and biases using the keys 'W1' and 'b1' and second layer weights #
     # and biases using the keys 'W2' and 'b2'.                                 #
     ############################################################################
-    pass
+    std = weight_scale
+    self.params['W1'] = std * np.random.randn(input_dim, hidden_dim)
+    self.params['b1'] = np.zeros(hidden_dim)
+    self.params['W2'] = std * np.random.randn(hidden_dim, num_classes)
+    self.params['b2'] = np.zeros(num_classes)
+
     ############################################################################
     #                             END OF YOUR CODE                             #
     ############################################################################
@@ -75,7 +80,10 @@ class TwoLayerNet(object):
     # TODO: Implement the forward pass for the two-layer net, computing the    #
     # class scores for X and storing them in the scores variable.              #
     ############################################################################
-    pass
+    W1, b1 = self.params['W1'], self.params['b1']
+    W2, b2 = self.params['W2'], self.params['b2']
+    out1,cache1 = affine_relu_forward(X, W1, b1)
+    scores,cache2 = affine_forward(out1, W2, b2)
     ############################################################################
     #                             END OF YOUR CODE                             #
     ############################################################################
@@ -95,13 +103,18 @@ class TwoLayerNet(object):
     # automated tests, make sure that your L2 regularization includes a factor #
     # of 0.5 to simplify the expression for the gradient.                      #
     ############################################################################
-    pass
+    loss, dscore = softmax_loss(scores, y)
+    dout1,grads['W2'],grads['b2'] = affine_backward(dscore, cache2)
+    _,grads['W1'],grads['b1'] = affine_relu_backward(dout1, cache1)
+
+    loss += 0.5 * self.reg * (np.sum(W1 * W1) + np.sum(W2 * W2))
+    grads['W2'] += self.reg * W2
+    grads['W1'] += self.reg * W1
     ############################################################################
     #                             END OF YOUR CODE                             #
     ############################################################################
 
     return loss, grads
-
 
 class FullyConnectedNet(object):
   """
@@ -161,7 +174,23 @@ class FullyConnectedNet(object):
     # beta2, etc. Scale parameters should be initialized to one and shift      #
     # parameters should be initialized to zero.                                #
     ############################################################################
-    pass
+    idx = 1
+    Din = input_dim
+    for dh in hidden_dims:
+      Dout = dh
+      std = weight_scale
+      # std = weight_scale * np.sqrt(2.0/Din)
+      self.params['W%d'%idx] = std * np.random.randn(Din, Dout)
+      self.params['b%d'%idx] = np.zeros(Dout)
+      if self.use_batchnorm:
+        self.params['gamma%d'%idx] = np.ones(Dout)
+        self.params['beta%d'%idx] = np.zeros(Dout)
+      idx += 1
+      Din = Dout
+    Dout = num_classes
+    self.params['W%d'%idx] = std * np.random.randn(Din, Dout)
+    self.params['b%d'%idx] = np.zeros(Dout)
+
     ############################################################################
     #                             END OF YOUR CODE                             #
     ############################################################################
@@ -219,7 +248,24 @@ class FullyConnectedNet(object):
     # self.bn_params[1] to the forward pass for the second batch normalization #
     # layer, etc.                                                              #
     ############################################################################
-    pass
+    cache = {}
+    num_layers = self.num_layers
+    data_flow = X
+    for i in range(1,num_layers+1):
+      Wi = self.params['W%d'%i]
+      bi = self.params['b%d'%i]
+      if i < num_layers:
+        if self.use_batchnorm:
+          gammai = self.params['gamma%d'%i]
+          betai = self.params['beta%d'%i]
+          data_flow,cache[i] = affine_bn_relu_forward(data_flow, Wi, bi, gammai, betai, self.bn_params[i-1])
+        else:
+          data_flow,cache[i] = affine_relu_forward(data_flow, Wi, bi)
+      else:
+        data_flow,cache[i] = affine_forward(data_flow, Wi, bi)
+      if self.use_dropout and i < num_layers:
+          data_flow, cache['d%d'%i] = dropout_forward(data_flow, self.dropout_param)
+    scores = data_flow
     ############################################################################
     #                             END OF YOUR CODE                             #
     ############################################################################
@@ -242,7 +288,25 @@ class FullyConnectedNet(object):
     # automated tests, make sure that your L2 regularization includes a factor #
     # of 0.5 to simplify the expression for the gradient.                      #
     ############################################################################
-    pass
+    loss, dscore = softmax_loss(scores, y)
+    dout = {}
+    for i in range(1,num_layers+1)[::-1]:
+      if i == num_layers:
+        dout[i], grads['W%d'%i], grads['b%d'%i] = affine_backward(dscore, cache[i])
+      else:
+        if self.use_dropout:
+          dx = dropout_backward(dout[i+1], cache['d%d'%i])
+        else:
+          dx = dout[i+1]
+        if self.use_batchnorm:
+          dout[i], grads['W%d'%i], grads['b%d'%i], grads['gamma%d'%i], grads['beta%d'%i] = affine_bn_relu_backward(dx, cache[i])
+        else:
+          dout[i], grads['W%d'%i], grads['b%d'%i] = affine_relu_backward(dx, cache[i])
+
+    for i in range(1,num_layers+1):
+      Wi = self.params['W%d'%i]
+      loss +=  0.5 * self.reg * np.sum(Wi**2)
+      grads['W%d'%i] += self.reg * Wi
     ############################################################################
     #                             END OF YOUR CODE                             #
     ############################################################################

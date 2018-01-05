@@ -31,7 +31,7 @@ class Solver(object):
     'X_train': # training data
     'y_train': # training labels
     'X_val': # validation data
-    'X_train': # validation labels
+    'y_val': # validation labels
   }
   model = MyAwesomeModel(hidden_size=100, reg=10)
   solver = Solver(model, data,
@@ -172,7 +172,6 @@ class Solver(object):
       next_w, next_config = self.update_rule(w, dw, config)
       self.model.params[p] = next_w
       self.optim_configs[p] = next_config
-
 
   def check_accuracy(self, X, y, num_samples=None, batch_size=100):
     """
